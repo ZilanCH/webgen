@@ -6,6 +6,12 @@ $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 $user = $_SESSION['user'] ?? null;
 
+if (!$user && $_SERVER['REQUEST_METHOD'] === 'POST') {
+    $_SESSION['flash'] = 'Bitte zuerst einloggen, um Seiten zu erstellen oder zu sehen.';
+    header('Location: /index.php');
+    exit;
+}
+
 $templates = [
     'portfolio' => [
         'label' => 'Portfolio',
@@ -293,7 +299,7 @@ function build_logo_for_preview(): string
 $message = '';
 $previewHtml = '';
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+if ($user && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $data = array_map(fn($value) => is_string($value) ? trim($value) : $value, $_POST);
     $template = $_POST['template'] ?? 'about';
     $buttons = gather_buttons();
@@ -385,10 +391,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             — <a class="links" href="/dashboard.php">Dashboard</a> <a class="links" href="/logout.php">Logout</a>
             <?php if ($user['role'] === 'Admin'): ?><a class="links" href="/admin.php">Admin</a><?php endif; ?>
         </p>
+    <?php else: ?>
+        <p class="small-note">Bitte einloggen oder registrieren, um den Generator zu verwenden.</p>
     <?php endif; ?>
     <?php if ($flash): ?><div class="message"><?= htmlspecialchars($flash, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
 </header>
 
+<?php if (!$user): ?>
+<div class="wrapper" style="grid-template-columns: 1fr; max-width: 520px; margin: 0 auto;">
+    <div class="auth">
+        <h2>Login</h2>
+        <p class="small-note">Melde dich an, um den Generator nutzen zu können.</p>
+        <form action="/login.php" method="post">
+            <label for="login-username">Username<input type="text" id="login-username" name="username" required></label>
+            <label for="login-password">Password<input type="password" id="login-password" name="password" required></label>
+            <button type="submit" class="primary">Login</button>
+        </form>
+        <h2>Register</h2>
+        <form action="/register.php" method="post">
+            <label for="reg-username">Username<input type="text" id="reg-username" name="username" required></label>
+            <label for="reg-password">Password (min 8 characters)<input type="password" id="reg-password" name="password" minlength="8" required></label>
+            <button type="submit" class="secondary">Create Account</button>
+        </form>
+    </div>
+</div>
+<?php else: ?>
 <div class="wrapper">
     <?php if (!$user): ?>
     <div class="auth">
@@ -470,7 +497,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
     </div>
 </div>
+<?php endif; ?>
 
+<?php if ($user): ?>
 <script>
 const templateSelect = document.getElementById('template-select');
 const templateFields = document.querySelectorAll('.template-fields');
@@ -515,5 +544,6 @@ if (existingLabels.length) {
 }
 updateTemplateVisibility();
 </script>
+<?php endif; ?>
 </body>
 </html>
