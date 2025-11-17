@@ -249,6 +249,9 @@ function build_site_html(array $data, string $template, array $buttons, array $s
         ul { padding-left: 20px; }
         .cta { font-weight: bold; color: var(--primary); text-align: center; }
         .hero { text-align: center; }
+        .actions { margin-top: 10px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
+        .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,0.08); color: #e2e8f0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
+        .social a { color: #e2e8f0; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); text-decoration: none; }
     </style>
 </head>
 <body>
@@ -323,6 +326,8 @@ if ($user && $_SERVER['REQUEST_METHOD'] === 'POST') {
         }
         $html = build_site_html($data, $template, $buttons, $social, $logoPath, $favicon);
         file_put_contents($targetDir . '/index.php', $html);
+        add_owned_page_to_user($user['username'], $slug);
+        $user = $_SESSION['user'];
         $message = "Generated site at ./{$slug}/index.php";
         $previewHtml = $html;
     } else {
@@ -368,18 +373,23 @@ if ($user && $_SERVER['REQUEST_METHOD'] === 'POST') {
         .field-group > div { flex: 1; }
         .small-note { font-size: 12px; color: #94a3b8; }
         button { margin-top: 14px; padding: 12px 16px; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; }
-        .primary { background: #00bcd4; color: #050815; }
-        .secondary { background: #334155; color: #fff; margin-left: 8px; }
+        .primary { background: linear-gradient(135deg, #22d3ee, #8b5cf6); color: #050815; box-shadow: 0 12px 30px rgba(34,211,238,0.25); }
+        .secondary { background: #1e293b; color: #fff; margin-left: 8px; border: 1px solid #334155; }
+        .tertiary { background: transparent; color: #22d3ee; border: 1px solid #22d3ee; }
         .template-fields { margin-top: 12px; border: 1px dashed #334155; padding: 12px; border-radius: 10px; }
         .section-title { margin-top: 20px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
         .mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
         .preview { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; }
         iframe { width: 100%; height: 800px; background: #fff; border-radius: 10px; border: 1px solid #1f2937; }
-        .message { margin: 12px 0; padding: 10px; background: #22d3ee; color: #050815; border-radius: 8px; }
-        .dynamic-group { background: #111827; padding: 10px; border-radius: 8px; margin-top: 8px; }
-        .flex { display: flex; gap: 8px; }
+        .message { margin: 12px 0; padding: 10px; background: rgba(34,211,238,0.15); color: #e2e8f0; border: 1px solid #22d3ee; border-radius: 8px; }
+        .message a { color: #22d3ee; font-weight: 700; text-decoration: none; }
+        .dynamic-group { background: #111827; padding: 10px; border-radius: 8px; margin-top: 8px; border: 1px solid #1f2937; }
+        .flex { display: flex; gap: 8px; flex-wrap: wrap; }
         .auth { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; padding: 18px; }
-        .links a { color: #22d3ee; margin-right: 12px; text-decoration: none; }
+        .links a { color: #22d3ee; margin-right: 12px; text-decoration: none; font-weight: 700; }
+        .nav { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+        .pill { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.08); text-decoration: none; color: #e2e8f0; border: 1px solid #1f2937; }
+        .pill strong { color: #22d3ee; }
     </style>
 </head>
 <body>
@@ -387,10 +397,13 @@ if ($user && $_SERVER['REQUEST_METHOD'] === 'POST') {
     <h1>Zilan Webgen</h1>
     <p class="small-note">Cyan/Violet themed website generator. Use the builder to preview and generate ./&lt;slug&gt;/index.php without any external backend.</p>
     <?php if ($user): ?>
-        <p>Angemeldet als <strong><?= htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8') ?></strong> (<?= htmlspecialchars($user['role'], ENT_QUOTES, 'UTF-8') ?>)
-            — <a class="links" href="/dashboard.php">Dashboard</a> <a class="links" href="/logout.php">Logout</a>
-            <?php if ($user['role'] === 'Admin'): ?><a class="links" href="/admin.php">Admin</a><?php endif; ?>
-        </p>
+        <div class="nav">
+            <span class="pill">👤 <strong><?= htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8') ?></strong> · <?= htmlspecialchars($user['role'], ENT_QUOTES, 'UTF-8') ?></span>
+            <a class="pill" href="/dashboard.php">📂 Dashboard</a>
+            <a class="pill" href="/editor.php">🛠️ Editor</a>
+            <?php if ($user['role'] === 'Admin'): ?><a class="pill" href="/admin.php">🛡️ Admin</a><?php endif; ?>
+            <a class="pill" href="/logout.php">🚪 Logout</a>
+        </div>
     <?php else: ?>
         <p class="small-note">Bitte einloggen oder registrieren, um den Generator zu verwenden.</p>
     <?php endif; ?>
@@ -484,12 +497,12 @@ if ($user && $_SERVER['REQUEST_METHOD'] === 'POST') {
         </label>
 
         <div class="section-title">Actions</div>
-        <button class="primary" type="submit" name="action" value="preview">Preview</button>
-        <button class="secondary" type="submit" name="action" value="generate">Generate Site</button>
+        <button class="primary" type="submit" name="action" value="preview">✨ Preview</button>
+        <button class="secondary" type="submit" name="action" value="generate">🚀 Generate Site</button>
     </form>
 
     <div class="preview">
-        <?php if ($message): ?><div class="message"><?= htmlspecialchars($message) ?></div><?php endif; ?>
+        <?php if ($message): ?><div class="message"><?= htmlspecialchars($message) ?><?php if (!empty($slug)): ?> · <a href="/<?= htmlspecialchars($slug) ?>/" target="_blank" rel="noopener">Seite öffnen</a><?php endif; ?></div><?php endif; ?>
         <?php if ($previewHtml): ?>
             <iframe srcdoc="<?= htmlspecialchars($previewHtml) ?>" title="Preview"></iframe>
         <?php else: ?>
