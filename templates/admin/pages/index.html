@@ -1,0 +1,29 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="heading">
+  <h1>All pages</h1>
+</div>
+{% if pages %}
+  <div class="table">
+    <div class="table-row header">
+      <div>Title</div>
+      <div>Owner</div>
+      <div></div>
+    </div>
+    {% for page in pages %}
+      <div class="table-row">
+        <div><a href="{{ url_for('admin_view_page', page_id=page.id) }}">{{ page.title }}</a></div>
+        <div>{{ page.owner_name }} ({{ page.owner_email }})</div>
+        <div class="actions">
+          <a href="{{ url_for('admin_view_page', page_id=page.id) }}">View</a>
+          <form method="post" action="{{ url_for('admin_delete_page', page_id=page.id) }}" onsubmit="return confirm('Delete this page?');">
+            <button type="submit" class="link">Delete</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p>No generated pages yet.</p>
+{% endif %}
+{% endblock %}
