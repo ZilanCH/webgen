@@ -430,6 +430,23 @@ if ($user && $_SERVER['REQUEST_METHOD'] === 'POST') {
 </div>
 <?php else: ?>
 <div class="wrapper">
+    <?php if (!$user): ?>
+    <div class="auth">
+        <h2>Login</h2>
+        <form action="/login.php" method="post">
+            <label for="login-username">Username<input type="text" id="login-username" name="username" required></label>
+            <label for="login-password">Password<input type="password" id="login-password" name="password" required></label>
+            <button type="submit" class="primary">Login</button>
+        </form>
+        <h2>Register</h2>
+        <form action="/register.php" method="post">
+            <label for="reg-username">Username<input type="text" id="reg-username" name="username" required></label>
+            <label for="reg-password">Password (min 8 characters)<input type="password" id="reg-password" name="password" minlength="8" required></label>
+            <button type="submit" class="secondary">Create Account</button>
+        </form>
+    </div>
+    <?php endif; ?>
+
     <form method="post" enctype="multipart/form-data">
         <div class="section-title">Basics</div>
         <label>Name<input type="text" name="name" value="<?= htmlspecialchars($data['name'] ?? '') ?>" required></label>
