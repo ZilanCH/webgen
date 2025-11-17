@@ -1,562 +1,671 @@
 <?php
-require __DIR__ . '/auth.php';
-ensure_session_started();
+session_start();
 
-$flash = $_SESSION['flash'] ?? null;
-unset($_SESSION['flash']);
-$user = $_SESSION['user'] ?? null;
+if (php_sapi_name() === 'cli-server') {
+    $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    $fullPath = __DIR__ . $path;
+    if ($path !== '/' && file_exists($fullPath)) {
+        return false;
+    }
+}
 
-if (!$user && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $_SESSION['flash'] = 'Bitte zuerst einloggen, um Seiten zu erstellen oder zu sehen.';
-    header('Location: /index.php');
+const DATA_FILE = __DIR__ . '/webgen.json';
+
+function load_data(): array {
+    if (!file_exists(DATA_FILE)) {
+        $default = [
+            'users' => [
+                1 => [
+                    'id' => 1,
+                    'email' => 'admin@example.com',
+                    'password_hash' => password_hash('admin123', PASSWORD_DEFAULT),
+                    'role' => 'admin',
+                    'name' => 'Admin User'
+                ],
+            ],
+            'next_user_id' => 2,
+            'pages' => [],
+            'next_page_id' => 1,
+            'footer_settings' => [
+                'text' => ''
+            ],
+            'footer_links' => [],
+            'next_footer_link_id' => 1
+        ];
+        save_data($default);
+        return $default;
+    }
+
+    $contents = file_get_contents(DATA_FILE);
+    $decoded = json_decode($contents, true);
+    if (!is_array($decoded)) {
+        $decoded = [];
+    }
+
+    // Ensure required keys exist to avoid undefined indexes after upgrades.
+    $decoded += [
+        'users' => [],
+        'next_user_id' => 1,
+        'pages' => [],
+        'next_page_id' => 1,
+        'footer_settings' => ['text' => ''],
+        'footer_links' => [],
+        'next_footer_link_id' => 1
+    ];
+
+    return $decoded;
+}
+
+function save_data(array $data): void {
+    $fp = fopen(DATA_FILE, 'c+');
+    if (!$fp) {
+        throw new RuntimeException('Unable to open data file');
+    }
+    if (!flock($fp, LOCK_EX)) {
+        fclose($fp);
+        throw new RuntimeException('Unable to lock data file');
+    }
+    ftruncate($fp, 0);
+    fwrite($fp, json_encode($data, JSON_PRETTY_PRINT));
+    fflush($fp);
+    flock($fp, LOCK_UN);
+    fclose($fp);
+}
+
+function current_user(array $data): ?array {
+    if (!isset($_SESSION['user_id'])) {
+        return null;
+    }
+    $id = $_SESSION['user_id'];
+    return $data['users'][$id] ?? null;
+}
+
+function require_login(array $data): void {
+    if (!current_user($data)) {
+        header('Location: ?route=login');
+        exit;
+    }
+}
+
+function require_admin(array $data): void {
+    $user = current_user($data);
+    if (!$user || $user['role'] !== 'admin') {
+        header('Location: ?route=login');
+        exit;
+    }
+}
+
+function render(string $template, array $vars = []): void {
+    $template_file = $template;
+    extract($vars);
+    include __DIR__ . '/templates/layout.php';
+}
+
+function sanitize(string $value): string {
+    return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+}
+
+function footer_text(array $data, string $pageName = 'Webgen'): string {
+    $text = trim($data['footer_settings']['text'] ?? '');
+    if ($text !== '') {
+        return $text;
+    }
+    return "©️{$pageName} 2025 - All rights reserved!";
+}
+
+function sorted_footer_links(array $data): array {
+    $links = array_values($data['footer_links']);
+    usort($links, function ($a, $b) {
+        return ($a['position'] ?? 0) <=> ($b['position'] ?? 0);
+    });
+    return $links;
+}
+
+function handle_login(array &$data): void {
+    $error = null;
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $email = strtolower(trim($_POST['email'] ?? ''));
+        $password = $_POST['password'] ?? '';
+        foreach ($data['users'] as $user) {
+            if (strtolower($user['email']) === $email && password_verify($password, $user['password_hash'])) {
+                $_SESSION['user_id'] = $user['id'];
+                header('Location: ?route=pages');
+                exit;
+            }
+        }
+        $error = 'Ungültige Anmeldedaten';
+    }
+
+    render('login.php', [
+        'title' => 'Login',
+        'error' => $error,
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
+}
+
+function handle_logout(): void {
+    session_destroy();
+    header('Location: ?route=login');
     exit;
 }
 
-$templates = [
-    'portfolio' => [
-        'label' => 'Portfolio',
-        'description' => 'Showcase your projects and background.',
-        'fields' => [
-            ['name' => 'portfolio_about', 'label' => 'About blurb', 'type' => 'textarea', 'placeholder' => 'Short introduction.'],
-            ['name' => 'portfolio_projects', 'label' => 'Projects (one per line as Title | Description | Link)', 'type' => 'textarea', 'placeholder' => 'Project One | What it does | https://example.com'],
-        ],
-    ],
-    'contact' => [
-        'label' => 'Contact',
-        'description' => 'Contact details and quick call-to-actions.',
-        'fields' => [
-            ['name' => 'contact_email', 'label' => 'Contact email', 'type' => 'text'],
-            ['name' => 'contact_phone', 'label' => 'Phone number', 'type' => 'text'],
-            ['name' => 'contact_address', 'label' => 'Address', 'type' => 'textarea'],
-            ['name' => 'contact_message', 'label' => 'Headline message', 'type' => 'text'],
-        ],
-    ],
-    'imprint_privacy' => [
-        'label' => 'Imprint / Privacy',
-        'description' => 'Display legal imprint and privacy notice.',
-        'fields' => [
-            ['name' => 'imprint_body', 'label' => 'Imprint content', 'type' => 'textarea'],
-            ['name' => 'privacy_body', 'label' => 'Privacy policy', 'type' => 'textarea'],
-        ],
-    ],
-    'product' => [
-        'label' => 'Product',
-        'description' => 'Highlight a product with features and pricing.',
-        'fields' => [
-            ['name' => 'product_name', 'label' => 'Product name', 'type' => 'text'],
-            ['name' => 'product_description', 'label' => 'Description', 'type' => 'textarea'],
-            ['name' => 'product_features', 'label' => 'Features (one per line)', 'type' => 'textarea'],
-            ['name' => 'product_price', 'label' => 'Price display', 'type' => 'text'],
-        ],
-    ],
-    'pricing' => [
-        'label' => 'Pricing',
-        'description' => 'List multiple pricing plans.',
-        'fields' => [
-            ['name' => 'pricing_plans', 'label' => 'Plans (one per line as Name | Price | Features separated by ; )', 'type' => 'textarea'],
-            ['name' => 'pricing_cta', 'label' => 'Shared call-to-action', 'type' => 'text'],
-        ],
-    ],
-    'about' => [
-        'label' => 'About',
-        'description' => 'Simple about page with highlights.',
-        'fields' => [
-            ['name' => 'about_story', 'label' => 'Story', 'type' => 'textarea'],
-            ['name' => 'about_highlights', 'label' => 'Highlights (one per line)', 'type' => 'textarea'],
-        ],
-    ],
-];
-
-function sanitize_text(string $value): string
-{
-    return htmlspecialchars(trim($value), ENT_QUOTES, 'UTF-8');
+function handle_pages(array &$data): void {
+    require_login($data);
+    $user = current_user($data);
+    $pages = array_values(array_filter($data['pages'], function ($page) use ($user) {
+        return $page['owner_id'] === $user['id'] || $user['role'] === 'admin';
+    }));
+    usort($pages, function ($a, $b) {
+        return $b['id'] <=> $a['id'];
+    });
+    render('pages/index.php', [
+        'title' => 'Seiten',
+        'pages' => $pages,
+        'data' => $data,
+        'user' => $user
+    ]);
 }
 
-function sanitize_slug(string $slug): string
-{
-    $slug = strtolower(trim($slug));
-    $slug = preg_replace('/[^a-z0-9-]+/', '-', $slug);
-    return trim($slug, '-') ?: 'site';
+function handle_page_view(array &$data, int $id): void {
+    $page = $data['pages'][$id] ?? null;
+    if (!$page) {
+        http_response_code(404);
+        echo 'Seite nicht gefunden';
+        return;
+    }
+    $owner = $data['users'][$page['owner_id']] ?? null;
+    render('pages/view.php', [
+        'title' => $page['title'],
+        'page' => $page,
+        'owner' => $owner,
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
 }
 
-function gather_buttons(): array
-{
-    $buttons = [];
-    $labels = $_POST['button_label'] ?? [];
-    $urls = $_POST['button_url'] ?? [];
-    $colors = $_POST['button_color'] ?? [];
-    foreach ($labels as $index => $label) {
-        $label = sanitize_text($label);
-        $url = sanitize_text($urls[$index] ?? '');
-        if ($label === '' && $url === '') {
-            continue;
+function handle_page_create(array &$data): void {
+    require_login($data);
+    $user = current_user($data);
+    $errors = [];
+    $title = trim($_POST['title'] ?? '');
+    $content = trim($_POST['content'] ?? '');
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($title === '') {
+            $errors[] = 'Titel ist erforderlich';
         }
-        $buttons[] = [
-            'label' => $label,
-            'url' => $url,
-            'color' => sanitize_text($colors[$index] ?? ''),
-        ];
-    }
-    return $buttons;
-}
-
-function gather_social(): array
-{
-    $social = [];
-    $email = sanitize_text($_POST['social_email'] ?? '');
-    $discord = sanitize_text($_POST['social_discord'] ?? '');
-    if ($email !== '') {
-        $social[] = ['label' => 'Email', 'url' => 'mailto:' . $email];
-    }
-    if ($discord !== '') {
-        $social[] = ['label' => 'Discord', 'url' => $discord];
-    }
-    return $social;
-}
-
-function parse_lines(string $input): array
-{
-    $lines = preg_split('/\r?\n/', trim($input));
-    return array_values(array_filter(array_map('trim', $lines), fn($line) => $line !== ''));
-}
-
-function build_template_content(string $template, array $data): string
-{
-    switch ($template) {
-        case 'portfolio':
-            $projects = [];
-            foreach (parse_lines($data['portfolio_projects'] ?? '') as $line) {
-                [$title, $desc, $link] = array_pad(array_map('trim', explode('|', $line)), 3, '');
-                $projects[] = ['title' => sanitize_text($title), 'desc' => sanitize_text($desc), 'link' => sanitize_text($link)];
-            }
-            $about = sanitize_text($data['portfolio_about'] ?? '');
-            $projectMarkup = '';
-            foreach ($projects as $project) {
-                $linkPart = $project['link'] ? '<a href="' . $project['link'] . '" target="_blank" rel="noopener">Visit</a>' : '';
-                $projectMarkup .= "<div class='card'><h3>{$project['title']}</h3><p>{$project['desc']}</p>{$linkPart}</div>";
-            }
-            return "<section><h2>About</h2><p>{$about}</p></section><section><h2>Projects</h2><div class='grid'>{$projectMarkup}</div></section>";
-        case 'contact':
-            $email = sanitize_text($data['contact_email'] ?? '');
-            $phone = sanitize_text($data['contact_phone'] ?? '');
-            $address = sanitize_text($data['contact_address'] ?? '');
-            $headline = sanitize_text($data['contact_message'] ?? '');
-            $contactLines = '';
-            if ($email) {
-                $contactLines .= "<p><strong>Email:</strong> <a href='mailto:{$email}'>{$email}</a></p>";
-            }
-            if ($phone) {
-                $contactLines .= "<p><strong>Phone:</strong> {$phone}</p>";
-            }
-            if ($address) {
-                $contactLines .= "<p><strong>Address:</strong> {$address}</p>";
-            }
-            return "<section><h2>{$headline}</h2>{$contactLines}<p>We will get back to you quickly.</p></section>";
-        case 'imprint_privacy':
-            $imprint = nl2br(sanitize_text($data['imprint_body'] ?? ''));
-            $privacy = nl2br(sanitize_text($data['privacy_body'] ?? ''));
-            return "<section><h2>Imprint</h2><p>{$imprint}</p></section><section><h2>Privacy Policy</h2><p>{$privacy}</p></section>";
-        case 'product':
-            $name = sanitize_text($data['product_name'] ?? '');
-            $description = sanitize_text($data['product_description'] ?? '');
-            $features = parse_lines($data['product_features'] ?? '');
-            $price = sanitize_text($data['product_price'] ?? '');
-            $featureList = '';
-            foreach ($features as $feature) {
-                $featureList .= '<li>' . sanitize_text($feature) . '</li>';
-            }
-            return "<section class='hero'><h2>{$name}</h2><p>{$description}</p><p class='price'>{$price}</p></section><section><h3>Features</h3><ul>{$featureList}</ul></section>";
-        case 'pricing':
-            $plans = [];
-            foreach (parse_lines($data['pricing_plans'] ?? '') as $line) {
-                [$plan, $price, $features] = array_pad(array_map('trim', explode('|', $line)), 3, '');
-                $plans[] = [
-                    'plan' => sanitize_text($plan),
-                    'price' => sanitize_text($price),
-                    'features' => array_filter(array_map('trim', explode(';', $features)))
-                ];
-            }
-            $cta = sanitize_text($data['pricing_cta'] ?? '');
-            $planMarkup = '';
-            foreach ($plans as $plan) {
-                $featureItems = '';
-                foreach ($plan['features'] as $f) {
-                    $featureItems .= '<li>' . sanitize_text($f) . '</li>';
-                }
-                $planMarkup .= "<div class='card'><h3>{$plan['plan']}</h3><p class='price'>{$plan['price']}</p><ul>{$featureItems}</ul></div>";
-            }
-            return "<section><h2>Plans</h2><div class='grid'>{$planMarkup}</div><p class='cta'>{$cta}</p></section>";
-        case 'about':
-        default:
-            $story = sanitize_text($data['about_story'] ?? '');
-            $highlights = parse_lines($data['about_highlights'] ?? '');
-            $highlightList = '';
-            foreach ($highlights as $hl) {
-                $highlightList .= '<li>' . sanitize_text($hl) . '</li>';
-            }
-            return "<section><h2>About</h2><p>{$story}</p><ul>{$highlightList}</ul></section>";
-    }
-}
-
-function build_site_html(array $data, string $template, array $buttons, array $social, string $logoPath, string $favicon): string
-{
-    $primary = sanitize_text($data['primary_color'] ?? '#00bcd4');
-    $secondary = sanitize_text($data['secondary_color'] ?? '#8b5cf6');
-    $name = sanitize_text($data['name'] ?? 'Zilan Webgen');
-    $title = sanitize_text($data['title'] ?? 'Title');
-    $subtitle = sanitize_text($data['subtitle'] ?? 'Subtitle');
-
-    $buttonMarkup = '';
-    foreach ($buttons as $button) {
-        $color = $button['color'] ?: $primary;
-        $buttonMarkup .= "<a class='btn' style='background: {$color}' href='{$button['url']}' target='_blank' rel='noopener'>{$button['label']}</a>";
-    }
-
-    $socialMarkup = '';
-    foreach ($social as $item) {
-        $socialMarkup .= "<a href='{$item['url']}' target='_blank' rel='noopener'>{$item['label']}</a>";
-    }
-
-    $logoImg = $logoPath ? "<img class='logo' src='{$logoPath}' alt='Logo'>" : '';
-    $faviconLink = $favicon ? "<link rel='icon' href='{$favicon}'>" : '';
-
-    $templateContent = build_template_content($template, $data);
-
-    return <<<HTML
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{$title}</title>
-    {$faviconLink}
-    <style>
-        :root { --primary: {$primary}; --secondary: {$secondary}; }
-        * { box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #0b1020; color: #e2e8f0; }
-        header { background: radial-gradient(circle at 20% 20%, rgba(0,188,212,0.18), transparent 35%), radial-gradient(circle at 80% 0%, rgba(139,92,246,0.18), transparent 35%), #0b1020; color: #fff; padding: 32px 24px; text-align: center; }
-        header h1 { margin: 8px 0; }
-        header p { margin: 0; opacity: 0.9; }
-        main { padding: 24px; max-width: 900px; margin: 0 auto; }
-        section { background: #0f172a; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.35); border: 1px solid #1e293b; }
-        h2 { margin-top: 0; color: var(--primary); }
-        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-        .card { background: #0b1224; border: 1px solid #1e293b; border-radius: 10px; padding: 16px; }
-        .btn { display: inline-block; margin: 6px 6px 0 0; padding: 10px 16px; border-radius: 8px; color: #fff; text-decoration: none; font-weight: 700; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
-        .social { margin-top: 10px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
-        .logo { max-height: 60px; margin-bottom: 8px; }
-        .price { font-size: 22px; color: var(--secondary); font-weight: bold; }
-        ul { padding-left: 20px; }
-        .cta { font-weight: bold; color: var(--primary); text-align: center; }
-        .hero { text-align: center; }
-        .actions { margin-top: 10px; display: flex; justify-content: center; gap: 10px; flex-wrap: wrap; }
-        .badge { display: inline-block; padding: 6px 10px; border-radius: 999px; background: rgba(255,255,255,0.08); color: #e2e8f0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; }
-        .social a { color: #e2e8f0; padding: 6px 10px; border-radius: 8px; background: rgba(255,255,255,0.06); text-decoration: none; }
-    </style>
-</head>
-<body>
-    <header>
-        {$logoImg}
-        <p class="eyebrow">{$name}</p>
-        <h1>{$title}</h1>
-        <p>{$subtitle}</p>
-        <div class="actions">{$buttonMarkup}</div>
-        <div class="social">{$socialMarkup}</div>
-    </header>
-    <main>
-        {$templateContent}
-    </main>
-</body>
-</html>
-HTML;
-}
-
-function handle_logo_upload(string $slug): string
-{
-    if (!isset($_FILES['logo_file']) || !is_uploaded_file($_FILES['logo_file']['tmp_name'])) {
-        return '';
-    }
-    $targetDir = __DIR__ . '/' . $slug . '/assets';
-    if (!is_dir($targetDir)) {
-        mkdir($targetDir, 0777, true);
-    }
-    $original = basename($_FILES['logo_file']['name']);
-    $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', $original);
-    $targetPath = $targetDir . '/' . $safeName;
-    if (move_uploaded_file($_FILES['logo_file']['tmp_name'], $targetPath)) {
-        return './assets/' . $safeName;
-    }
-    return '';
-}
-
-function build_logo_for_preview(): string
-{
-    if (!isset($_FILES['logo_file']) || !is_uploaded_file($_FILES['logo_file']['tmp_name'])) {
-        return '';
-    }
-    $mime = mime_content_type($_FILES['logo_file']['tmp_name']);
-    $data = base64_encode(file_get_contents($_FILES['logo_file']['tmp_name']));
-    return "data:{$mime};base64,{$data}";
-}
-
-$message = '';
-$previewHtml = '';
-
-if ($user && $_SERVER['REQUEST_METHOD'] === 'POST') {
-    $data = array_map(fn($value) => is_string($value) ? trim($value) : $value, $_POST);
-    $template = $_POST['template'] ?? 'about';
-    $buttons = gather_buttons();
-    $social = gather_social();
-    $slug = sanitize_slug($data['slug'] ?? 'site');
-
-    $logoPath = '';
-    $favicon = sanitize_text($data['favicon'] ?? '');
-    $logoUrl = sanitize_text($data['logo_url'] ?? '');
-
-    $action = $_POST['action'] ?? 'preview';
-
-    if ($action === 'generate') {
-        $targetDir = __DIR__ . '/' . $slug;
-        if (!is_dir($targetDir)) {
-            mkdir($targetDir, 0777, true);
+        if ($content === '') {
+            $errors[] = 'Inhalt ist erforderlich';
         }
-        $logoPath = handle_logo_upload($slug);
-        if (!$logoPath && $logoUrl) {
-            $logoPath = $logoUrl;
+
+        if (!$errors) {
+            $id = $data['next_page_id']++;
+            $data['pages'][$id] = [
+                'id' => $id,
+                'title' => $title,
+                'content' => $content,
+                'owner_id' => $user['id']
+            ];
+            save_data($data);
+            header('Location: ?route=pages');
+            exit;
         }
-        $html = build_site_html($data, $template, $buttons, $social, $logoPath, $favicon);
-        file_put_contents($targetDir . '/index.php', $html);
-        add_owned_page_to_user($user['username'], $slug);
-        $user = $_SESSION['user'];
-        $message = "Generated site at ./{$slug}/index.php";
-        $previewHtml = $html;
-    } else {
-        $logoPath = build_logo_for_preview();
-        if (!$logoPath && $logoUrl) {
-            $logoPath = $logoUrl;
-        }
-        $previewHtml = build_site_html($data, $template, $buttons, $social, $logoPath, $favicon);
-        $message = 'Preview updated. Use "Generate Site" to write files.';
     }
-} else {
-    $data = [
-        'primary_color' => '#00bcd4',
-        'secondary_color' => '#8b5cf6',
-        'template' => 'portfolio',
-        'name' => 'Zilan Webgen',
-        'title' => 'Create your site',
-        'subtitle' => 'Cyan & Violet powered builder',
+
+    render('pages/new.php', [
+        'title' => 'Neue Seite',
+        'errors' => $errors,
+        'values' => ['title' => $title, 'content' => $content],
+        'data' => $data,
+        'user' => $user
+    ]);
+}
+
+function handle_page_edit(array &$data, int $id): void {
+    require_login($data);
+    $user = current_user($data);
+    $page = $data['pages'][$id] ?? null;
+    if (!$page) {
+        http_response_code(404);
+        echo 'Seite nicht gefunden';
+        return;
+    }
+    if ($page['owner_id'] !== $user['id'] && $user['role'] !== 'admin') {
+        http_response_code(403);
+        echo 'Keine Berechtigung';
+        return;
+    }
+
+    $errors = [];
+    $title = $_POST['title'] ?? $page['title'];
+    $content = $_POST['content'] ?? $page['content'];
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        $title = trim($title);
+        $content = trim($content);
+        if ($title === '') {
+            $errors[] = 'Titel ist erforderlich';
+        }
+        if ($content === '') {
+            $errors[] = 'Inhalt ist erforderlich';
+        }
+        if (!$errors) {
+            $page['title'] = $title;
+            $page['content'] = $content;
+            $data['pages'][$id] = $page;
+            save_data($data);
+            header('Location: ?route=pages');
+            exit;
+        }
+    }
+
+    render('pages/edit.php', [
+        'title' => 'Seite bearbeiten',
+        'errors' => $errors,
+        'page' => $page,
+        'values' => ['title' => $title, 'content' => $content],
+        'data' => $data,
+        'user' => $user
+    ]);
+}
+
+function handle_page_delete(array &$data, int $id): void {
+    require_login($data);
+    $user = current_user($data);
+    $page = $data['pages'][$id] ?? null;
+    if (!$page) {
+        header('Location: ?route=pages');
+        return;
+    }
+    if ($page['owner_id'] !== $user['id'] && $user['role'] !== 'admin') {
+        header('Location: ?route=pages');
+        return;
+    }
+    unset($data['pages'][$id]);
+    save_data($data);
+    header('Location: ?route=pages');
+    exit;
+}
+
+function handle_admin_dashboard(array &$data): void {
+    require_admin($data);
+    render('admin/dashboard.php', [
+        'title' => 'Admin Dashboard',
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
+}
+
+function handle_admin_pages(array &$data): void {
+    require_admin($data);
+    $pages = array_values($data['pages']);
+    usort($pages, function ($a, $b) {
+        return $b['id'] <=> $a['id'];
+    });
+    render('admin/pages/index.php', [
+        'title' => 'Seitenverwaltung',
+        'pages' => $pages,
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
+}
+
+function handle_admin_page_view(array &$data, int $id): void {
+    require_admin($data);
+    $page = $data['pages'][$id] ?? null;
+    if (!$page) {
+        http_response_code(404);
+        echo 'Seite nicht gefunden';
+        return;
+    }
+    $owner = $data['users'][$page['owner_id']] ?? null;
+    render('admin/pages/view.php', [
+        'title' => 'Seite ansehen',
+        'page' => $page,
+        'owner' => $owner,
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
+}
+
+function handle_admin_page_delete(array &$data, int $id): void {
+    require_admin($data);
+    unset($data['pages'][$id]);
+    save_data($data);
+    header('Location: ?route=admin_pages');
+    exit;
+}
+
+function handle_admin_users(array &$data): void {
+    require_admin($data);
+    $users = array_values($data['users']);
+    usort($users, function ($a, $b) {
+        return $a['id'] <=> $b['id'];
+    });
+    render('admin/users/index.php', [
+        'title' => 'Benutzerverwaltung',
+        'users' => $users,
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
+}
+
+function handle_admin_user_new(array &$data): void {
+    require_admin($data);
+    $errors = [];
+    $values = [
+        'name' => trim($_POST['name'] ?? ''),
+        'email' => trim($_POST['email'] ?? ''),
+        'role' => $_POST['role'] ?? 'user',
+        'password' => $_POST['password'] ?? ''
     ];
-    $template = 'portfolio';
-    $buttons = [];
-    $social = [];
-    $slug = '';
-}
-?>
-<!doctype html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Zilan Webgen</title>
-    <style>
-        * { box-sizing: border-box; }
-        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; background: #050815; color: #e2e8f0; }
-        header.hero { padding: 28px 22px; background: linear-gradient(135deg, rgba(0,188,212,0.35), rgba(139,92,246,0.35)); border-bottom: 1px solid #1f2937; }
-        h1 { margin: 0; }
-        .wrapper { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 20px; align-items: start; }
-        form { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; padding: 18px; }
-        label { display: block; margin-top: 12px; font-weight: 600; }
-        input[type=text], input[type=url], input[type=color], input[type=password], textarea, select { width: 100%; padding: 10px; margin-top: 6px; border-radius: 8px; border: 1px solid #1f2937; background: #111827; color: #e2e8f0; }
-        textarea { min-height: 80px; }
-        .field-group { display: flex; gap: 10px; }
-        .field-group > div { flex: 1; }
-        .small-note { font-size: 12px; color: #94a3b8; }
-        button { margin-top: 14px; padding: 12px 16px; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; }
-        .primary { background: linear-gradient(135deg, #22d3ee, #8b5cf6); color: #050815; box-shadow: 0 12px 30px rgba(34,211,238,0.25); }
-        .secondary { background: #1e293b; color: #fff; margin-left: 8px; border: 1px solid #334155; }
-        .tertiary { background: transparent; color: #22d3ee; border: 1px solid #22d3ee; }
-        .template-fields { margin-top: 12px; border: 1px dashed #334155; padding: 12px; border-radius: 10px; }
-        .section-title { margin-top: 20px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
-        .mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
-        .preview { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; }
-        iframe { width: 100%; height: 800px; background: #fff; border-radius: 10px; border: 1px solid #1f2937; }
-        .message { margin: 12px 0; padding: 10px; background: rgba(34,211,238,0.15); color: #e2e8f0; border: 1px solid #22d3ee; border-radius: 8px; }
-        .message a { color: #22d3ee; font-weight: 700; text-decoration: none; }
-        .dynamic-group { background: #111827; padding: 10px; border-radius: 8px; margin-top: 8px; border: 1px solid #1f2937; }
-        .flex { display: flex; gap: 8px; flex-wrap: wrap; }
-        .auth { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; padding: 18px; }
-        .links a { color: #22d3ee; margin-right: 12px; text-decoration: none; font-weight: 700; }
-        .nav { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
-        .pill { display: inline-flex; align-items: center; gap: 6px; padding: 10px 14px; border-radius: 12px; background: rgba(255,255,255,0.08); text-decoration: none; color: #e2e8f0; border: 1px solid #1f2937; }
-        .pill strong { color: #22d3ee; }
-    </style>
-</head>
-<body>
-<header class="hero">
-    <h1>Zilan Webgen</h1>
-    <p class="small-note">Cyan/Violet themed website generator. Use the builder to preview and generate ./&lt;slug&gt;/index.php without any external backend.</p>
-    <?php if ($user): ?>
-        <div class="nav">
-            <span class="pill">👤 <strong><?= htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8') ?></strong> · <?= htmlspecialchars($user['role'], ENT_QUOTES, 'UTF-8') ?></span>
-            <a class="pill" href="/dashboard.php">📂 Dashboard</a>
-            <a class="pill" href="/editor.php">🛠️ Editor</a>
-            <?php if ($user['role'] === 'Admin'): ?><a class="pill" href="/admin.php">🛡️ Admin</a><?php endif; ?>
-            <a class="pill" href="/logout.php">🚪 Logout</a>
-        </div>
-    <?php else: ?>
-        <p class="small-note">Bitte einloggen oder registrieren, um den Generator zu verwenden.</p>
-    <?php endif; ?>
-    <?php if ($flash): ?><div class="message"><?= htmlspecialchars($flash, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
-</header>
 
-<?php if (!$user): ?>
-<div class="wrapper" style="grid-template-columns: 1fr; max-width: 520px; margin: 0 auto;">
-    <div class="auth">
-        <h2>Login</h2>
-        <p class="small-note">Melde dich an, um den Generator nutzen zu können.</p>
-        <form action="/login.php" method="post">
-            <label for="login-username">Username<input type="text" id="login-username" name="username" required></label>
-            <label for="login-password">Password<input type="password" id="login-password" name="password" required></label>
-            <button type="submit" class="primary">Login</button>
-        </form>
-        <h2>Register</h2>
-        <form action="/register.php" method="post">
-            <label for="reg-username">Username<input type="text" id="reg-username" name="username" required></label>
-            <label for="reg-password">Password (min 8 characters)<input type="password" id="reg-password" name="password" minlength="8" required></label>
-            <button type="submit" class="secondary">Create Account</button>
-        </form>
-    </div>
-</div>
-<?php else: ?>
-<div class="wrapper">
-    <?php if (!$user): ?>
-    <div class="auth">
-        <h2>Login</h2>
-        <form action="/login.php" method="post">
-            <label for="login-username">Username<input type="text" id="login-username" name="username" required></label>
-            <label for="login-password">Password<input type="password" id="login-password" name="password" required></label>
-            <button type="submit" class="primary">Login</button>
-        </form>
-        <h2>Register</h2>
-        <form action="/register.php" method="post">
-            <label for="reg-username">Username<input type="text" id="reg-username" name="username" required></label>
-            <label for="reg-password">Password (min 8 characters)<input type="password" id="reg-password" name="password" minlength="8" required></label>
-            <button type="submit" class="secondary">Create Account</button>
-        </form>
-    </div>
-    <?php endif; ?>
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($values['name'] === '') {
+            $errors[] = 'Name ist erforderlich';
+        }
+        if ($values['email'] === '') {
+            $errors[] = 'E-Mail ist erforderlich';
+        }
+        if ($values['password'] === '') {
+            $errors[] = 'Passwort ist erforderlich';
+        }
+        foreach ($data['users'] as $u) {
+            if (strtolower($u['email']) === strtolower($values['email'])) {
+                $errors[] = 'E-Mail ist bereits vergeben';
+                break;
+            }
+        }
 
-    <form method="post" enctype="multipart/form-data">
-        <div class="section-title">Basics</div>
-        <label>Name<input type="text" name="name" value="<?= htmlspecialchars($data['name'] ?? '') ?>" required></label>
-        <label>Title<input type="text" name="title" value="<?= htmlspecialchars($data['title'] ?? '') ?>" required></label>
-        <label>Subtitle<input type="text" name="subtitle" value="<?= htmlspecialchars($data['subtitle'] ?? '') ?>"></label>
-        <label>URL slug<input type="text" name="slug" value="<?= htmlspecialchars($data['slug'] ?? $slug ?? '') ?>" placeholder="my-site" required></label>
+        if (!$errors) {
+            $id = $data['next_user_id']++;
+            $data['users'][$id] = [
+                'id' => $id,
+                'name' => $values['name'],
+                'email' => $values['email'],
+                'role' => $values['role'] === 'admin' ? 'admin' : 'user',
+                'password_hash' => password_hash($values['password'], PASSWORD_DEFAULT)
+            ];
+            save_data($data);
+            header('Location: ?route=admin_users');
+            exit;
+        }
+    }
 
-        <div class="section-title">Branding</div>
-        <div class="mini-grid">
-            <label>Primary color<input type="color" name="primary_color" value="<?= htmlspecialchars($data['primary_color'] ?? '#00bcd4') ?>"></label>
-            <label>Secondary color<input type="color" name="secondary_color" value="<?= htmlspecialchars($data['secondary_color'] ?? '#8b5cf6') ?>"></label>
-        </div>
-        <label>Logo upload<input type="file" name="logo_file" accept="image/*"></label>
-        <label>Logo URL (used if no upload provided)<input type="url" name="logo_url" value="<?= htmlspecialchars($data['logo_url'] ?? '') ?>" placeholder="https://example.com/logo.png"></label>
-        <label>Favicon URL<input type="url" name="favicon" value="<?= htmlspecialchars($data['favicon'] ?? '') ?>" placeholder="https://example.com/favicon.ico"></label>
-
-        <div class="section-title">Template</div>
-        <label>Choose template
-            <select name="template" id="template-select">
-                <?php foreach ($templates as $key => $tpl): ?>
-                    <option value="<?= $key ?>" <?= $template === $key ? 'selected' : '' ?>><?= $tpl['label'] ?> — <?= $tpl['description'] ?></option>
-                <?php endforeach; ?>
-            </select>
-        </label>
-
-        <?php foreach ($templates as $key => $tpl): ?>
-            <div class="template-fields" data-template="<?= $key ?>" style="display: <?= $template === $key ? 'block' : 'none' ?>;">
-                <div class="small-note">Template fields for <?= $tpl['label'] ?></div>
-                <?php foreach ($tpl['fields'] as $field): ?>
-                    <?php $value = htmlspecialchars($data[$field['name']] ?? ''); ?>
-                    <?php if ($field['type'] === 'textarea'): ?>
-                        <label><?= $field['label'] ?><textarea name="<?= $field['name'] ?>" placeholder="<?= $field['placeholder'] ?? '' ?>"><?= $value ?></textarea></label>
-                    <?php else: ?>
-                        <label><?= $field['label'] ?><input type="text" name="<?= $field['name'] ?>" value="<?= $value ?>" placeholder="<?= $field['placeholder'] ?? '' ?>"></label>
-                    <?php endif; ?>
-                <?php endforeach; ?>
-            </div>
-        <?php endforeach; ?>
-
-        <div class="section-title">Custom buttons</div>
-        <div id="button-list"></div>
-        <button type="button" class="secondary" id="add-button">+ Add button</button>
-
-        <div class="section-title">Social links</div>
-        <label>Email<input type="text" name="social_email" value="<?= htmlspecialchars($_POST['social_email'] ?? '') ?>" placeholder="you@example.com"></label>
-        <label>Discord user URL<input type="url" name="social_discord" value="<?= htmlspecialchars($_POST['social_discord'] ?? '') ?>" placeholder="https://discord.com/users/123456789">
-            <div class="small-note">Use your Discord user URL (e.g., https://discord.com/users/&lt;id&gt;). Profile &gt; Copy User ID in Discord settings.</div>
-        </label>
-
-        <div class="section-title">Actions</div>
-        <button class="primary" type="submit" name="action" value="preview">✨ Preview</button>
-        <button class="secondary" type="submit" name="action" value="generate">🚀 Generate Site</button>
-    </form>
-
-    <div class="preview">
-        <?php if ($message): ?><div class="message"><?= htmlspecialchars($message) ?><?php if (!empty($slug)): ?> · <a href="/<?= htmlspecialchars($slug) ?>/" target="_blank" rel="noopener">Seite öffnen</a><?php endif; ?></div><?php endif; ?>
-        <?php if ($previewHtml): ?>
-            <iframe srcdoc="<?= htmlspecialchars($previewHtml) ?>" title="Preview"></iframe>
-        <?php else: ?>
-            <p class="small-note">Fill in the fields and click Preview to see the generated page.</p>
-        <?php endif; ?>
-    </div>
-</div>
-<?php endif; ?>
-
-<?php if ($user): ?>
-<script>
-const templateSelect = document.getElementById('template-select');
-const templateFields = document.querySelectorAll('.template-fields');
-const buttonList = document.getElementById('button-list');
-const addButton = document.getElementById('add-button');
-
-function updateTemplateVisibility() {
-    const value = templateSelect.value;
-    templateFields.forEach(block => {
-        block.style.display = block.dataset.template === value ? 'block' : 'none';
-    });
+    render('admin/users/new.php', [
+        'title' => 'Neuen Benutzer anlegen',
+        'errors' => $errors,
+        'values' => $values,
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
 }
 
-templateSelect.addEventListener('change', updateTemplateVisibility);
+function handle_admin_user_edit(array &$data, int $id): void {
+    require_admin($data);
+    $userRecord = $data['users'][$id] ?? null;
+    if (!$userRecord) {
+        http_response_code(404);
+        echo 'Benutzer nicht gefunden';
+        return;
+    }
 
-function createButtonRow(label = '', url = '', color = '') {
-    const wrapper = document.createElement('div');
-    wrapper.className = 'dynamic-group';
-    wrapper.innerHTML = `
-        <div class="flex">
-            <input type="text" name="button_label[]" placeholder="Button label" value="${label}" required>
-            <input type="url" name="button_url[]" placeholder="https://link" value="${url}" required>
-            <input type="color" name="button_color[]" value="${color || '#00bcd4'}" title="Button color">
-            <button type="button" class="secondary remove">Remove</button>
-        </div>
-    `;
-    wrapper.querySelector('.remove').addEventListener('click', () => wrapper.remove());
-    buttonList.appendChild(wrapper);
+    $errors = [];
+    $values = [
+        'name' => $_POST['name'] ?? $userRecord['name'],
+        'email' => $_POST['email'] ?? $userRecord['email'],
+        'role' => $_POST['role'] ?? $userRecord['role']
+    ];
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (trim($values['name']) === '') {
+            $errors[] = 'Name ist erforderlich';
+        }
+        if (trim($values['email']) === '') {
+            $errors[] = 'E-Mail ist erforderlich';
+        }
+        foreach ($data['users'] as $otherId => $u) {
+            if ($otherId !== $id && strtolower($u['email']) === strtolower($values['email'])) {
+                $errors[] = 'E-Mail ist bereits vergeben';
+                break;
+            }
+        }
+
+        if (!$errors) {
+            $userRecord['name'] = trim($values['name']);
+            $userRecord['email'] = trim($values['email']);
+            $userRecord['role'] = $values['role'] === 'admin' ? 'admin' : 'user';
+            $data['users'][$id] = $userRecord;
+            save_data($data);
+            header('Location: ?route=admin_users');
+            exit;
+        }
+    }
+
+    render('admin/users/edit.php', [
+        'title' => 'Benutzer bearbeiten',
+        'errors' => $errors,
+        'userRecord' => $userRecord,
+        'values' => $values,
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
 }
 
-addButton.addEventListener('click', () => createButtonRow());
-
-const existingLabels = <?= json_encode($_POST['button_label'] ?? []) ?>;
-const existingUrls = <?= json_encode($_POST['button_url'] ?? []) ?>;
-const existingColors = <?= json_encode($_POST['button_color'] ?? []) ?>;
-if (existingLabels.length) {
-    existingLabels.forEach((label, idx) => {
-        createButtonRow(label, existingUrls[idx] || '', existingColors[idx] || '');
-    });
-} else {
-    createButtonRow('Get in touch', '#', '#00bcd4');
+function handle_admin_user_delete(array &$data, int $id): void {
+    require_admin($data);
+    if (isset($data['users'][$id])) {
+        unset($data['users'][$id]);
+        // Clean up owned pages
+        foreach ($data['pages'] as $pid => $page) {
+            if ($page['owner_id'] === $id) {
+                unset($data['pages'][$pid]);
+            }
+        }
+        save_data($data);
+    }
+    header('Location: ?route=admin_users');
+    exit;
 }
-updateTemplateVisibility();
-</script>
-<?php endif; ?>
-</body>
-</html>
+
+function handle_admin_user_reset(array &$data, int $id): void {
+    require_admin($data);
+    $userRecord = $data['users'][$id] ?? null;
+    if ($userRecord) {
+        $newPassword = 'changeme123';
+        $userRecord['password_hash'] = password_hash($newPassword, PASSWORD_DEFAULT);
+        $data['users'][$id] = $userRecord;
+        save_data($data);
+    }
+    header('Location: ?route=admin_users');
+    exit;
+}
+
+function handle_admin_footer(array &$data): void {
+    require_admin($data);
+    $links = sorted_footer_links($data);
+    render('admin/footer/index.php', [
+        'title' => 'Footer verwalten',
+        'links' => $links,
+        'footerText' => $data['footer_settings']['text'] ?? '',
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
+}
+
+function handle_admin_footer_text(array &$data): void {
+    require_admin($data);
+    $text = trim($_POST['text'] ?? '');
+    $data['footer_settings']['text'] = $text;
+    save_data($data);
+    header('Location: ?route=admin_footer');
+    exit;
+}
+
+function handle_admin_footer_new_link(array &$data): void {
+    require_admin($data);
+    $errors = [];
+    $values = [
+        'label' => trim($_POST['label'] ?? ''),
+        'url' => trim($_POST['url'] ?? ''),
+        'position' => trim($_POST['position'] ?? '')
+    ];
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if ($values['label'] === '') {
+            $errors[] = 'Label ist erforderlich';
+        }
+        if ($values['url'] === '') {
+            $errors[] = 'URL ist erforderlich';
+        }
+        $pos = ($values['position'] === '') ? count($data['footer_links']) + 1 : (int) $values['position'];
+
+        if (!$errors) {
+            $id = $data['next_footer_link_id']++;
+            $data['footer_links'][$id] = [
+                'id' => $id,
+                'label' => $values['label'],
+                'url' => $values['url'],
+                'position' => $pos
+            ];
+            save_data($data);
+            header('Location: ?route=admin_footer');
+            exit;
+        }
+    }
+
+    render('admin/footer/new.php', [
+        'title' => 'Footer-Link hinzufügen',
+        'errors' => $errors,
+        'values' => $values,
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
+}
+
+function handle_admin_footer_edit_link(array &$data, int $id): void {
+    require_admin($data);
+    $link = $data['footer_links'][$id] ?? null;
+    if (!$link) {
+        http_response_code(404);
+        echo 'Link nicht gefunden';
+        return;
+    }
+
+    $errors = [];
+    $values = [
+        'label' => $_POST['label'] ?? $link['label'],
+        'url' => $_POST['url'] ?? $link['url'],
+        'position' => $_POST['position'] ?? $link['position']
+    ];
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+        if (trim($values['label']) === '') {
+            $errors[] = 'Label ist erforderlich';
+        }
+        if (trim($values['url']) === '') {
+            $errors[] = 'URL ist erforderlich';
+        }
+
+        if (!$errors) {
+            $link['label'] = trim($values['label']);
+            $link['url'] = trim($values['url']);
+            $link['position'] = (int) $values['position'];
+            $data['footer_links'][$id] = $link;
+            save_data($data);
+            header('Location: ?route=admin_footer');
+            exit;
+        }
+    }
+
+    render('admin/footer/edit.php', [
+        'title' => 'Footer-Link bearbeiten',
+        'errors' => $errors,
+        'link' => $link,
+        'values' => $values,
+        'data' => $data,
+        'user' => current_user($data)
+    ]);
+}
+
+function handle_admin_footer_delete_link(array &$data, int $id): void {
+    require_admin($data);
+    unset($data['footer_links'][$id]);
+    save_data($data);
+    header('Location: ?route=admin_footer');
+    exit;
+}
+
+$data = load_data();
+$route = $_GET['route'] ?? 'pages';
+$id = isset($_GET['id']) ? (int) $_GET['id'] : null;
+
+switch ($route) {
+    case 'login':
+        handle_login($data);
+        break;
+    case 'logout':
+        handle_logout();
+        break;
+    case 'pages':
+        handle_pages($data);
+        break;
+    case 'page_view':
+        handle_page_view($data, $id);
+        break;
+    case 'page_new':
+        handle_page_create($data);
+        break;
+    case 'page_edit':
+        handle_page_edit($data, $id);
+        break;
+    case 'page_delete':
+        handle_page_delete($data, $id);
+        break;
+    case 'admin_dashboard':
+        handle_admin_dashboard($data);
+        break;
+    case 'admin_pages':
+        handle_admin_pages($data);
+        break;
+    case 'admin_page_view':
+        handle_admin_page_view($data, $id);
+        break;
+    case 'admin_page_delete':
+        handle_admin_page_delete($data, $id);
+        break;
+    case 'admin_users':
+        handle_admin_users($data);
+        break;
+    case 'admin_user_new':
+        handle_admin_user_new($data);
+        break;
+    case 'admin_user_edit':
+        handle_admin_user_edit($data, $id);
+        break;
+    case 'admin_user_delete':
+        handle_admin_user_delete($data, $id);
+        break;
+    case 'admin_user_reset':
+        handle_admin_user_reset($data, $id);
+        break;
+    case 'admin_footer':
+        handle_admin_footer($data);
+        break;
+    case 'admin_footer_text':
+        handle_admin_footer_text($data);
+        break;
+    case 'admin_footer_new':
+        handle_admin_footer_new_link($data);
+        break;
+    case 'admin_footer_edit':
+        handle_admin_footer_edit_link($data, $id);
+        break;
+    case 'admin_footer_delete':
+        handle_admin_footer_delete_link($data, $id);
+        break;
+    default:
+        handle_pages($data);
+}
+

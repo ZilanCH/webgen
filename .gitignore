@@ -1,3 +1,2 @@
-__pycache__/
-webgen.db
-*.pyc
+webgen.json
+vendor/

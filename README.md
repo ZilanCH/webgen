@@ -1,27 +1,28 @@
 # webgen
 
-Flask-based admin interface for managing generated pages and user accounts.
+PHP-basierte Admin-Oberfläche zum Verwalten generierter Seiten, Benutzer und Footer-Inhalte auf Dateibasis.
 
-## Getting started
+## Start
 
-1. Install dependencies (network access required):
+1. Stelle sicher, dass PHP 8+ installiert ist.
+2. Starte den eingebauten PHP-Server im Projektverzeichnis:
    ```bash
-   pip install -r requirements.txt
+   php -S localhost:5000 index.php
    ```
-2. Start the server:
-   ```bash
-   python app.py
-   ```
-3. Sign in with the seeded admin account:
-   - **Email:** `admin@example.com`
-   - **Password:** `admin123`
+3. Melde dich mit dem vorgegebenen Admin-Account an:
+   - **E-Mail:** `admin@example.com`
+   - **Passwort:** `admin123`
+
+Alle Daten (Benutzer, Seiten, Footer-Text, Footer-Links) werden in `webgen.json` gespeichert. Es ist keine Datenbank oder SQL erforderlich.
 
 ## Features
 
-- User authentication with session support.
-- Admin dashboard to manage pages and users.
-- Page ownership controls so creators can edit/delete their own pages while admins can moderate everything.
-- User management for creating, editing, deleting, password resets, and role assignment (User/Admin).
-- Editable footer with support for custom text and ordered links (e.g., Legal or Privacy URLs).
+- Anmeldung mit Sessions und rollenbasiertem Zugriff (User/Admin).
+- Admin-Dashboard für Seiten-Moderation, Benutzerverwaltung (Anlegen, Bearbeiten, Löschen, Passwort-Reset) und Rollenvergabe.
+- Seitenbesitzer können ihre eigenen Seiten erstellen, bearbeiten und löschen; Admins sehen und verwalten alles.
+- Footer-Management: editierbarer Text sowie Links (z. B. Legal/Privacy) mit sortierbarer Position.
+- Standard-Footer, wenn kein eigener Text gesetzt ist: `©️{Seitenname} 2025 - All rights reserved!`.
 
-Data is stored in a local JSON file (`webgen.json`) so you can run the project without any SQL database setup.
+## Standarddaten zurücksetzen
+
+Lösche die Datei `webgen.json`, um mit den Standardwerten neu zu starten.
