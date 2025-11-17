@@ -1,0 +1,33 @@
+{% extends 'layout.html' %}
+{% block content %}
+<div class="heading">
+  <h1>Users</h1>
+  <a class="button" href="{{ url_for('admin_create_user') }}">New user</a>
+</div>
+{% if users %}
+  <div class="table">
+    <div class="table-row header">
+      <div>Name</div>
+      <div>Role</div>
+      <div></div>
+    </div>
+    {% for user in users %}
+      <div class="table-row">
+        <div>{{ user.name }} ({{ user.email }})</div>
+        <div>{{ user.role }}</div>
+        <div class="actions">
+          <a href="{{ url_for('admin_edit_user', user_id=user.id) }}">Edit</a>
+          <form method="post" action="{{ url_for('admin_reset_password', user_id=user.id) }}" onsubmit="return confirm('Reset password?');">
+            <button type="submit" class="link">Reset password</button>
+          </form>
+          <form method="post" action="{{ url_for('admin_delete_user', user_id=user.id) }}" onsubmit="return confirm('Delete this user?');">
+            <button type="submit" class="link">Delete</button>
+          </form>
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <p>No users yet.</p>
+{% endif %}
+{% endblock %}
