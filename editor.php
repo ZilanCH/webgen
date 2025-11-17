@@ -1,6 +1,6 @@
 <?php
 require __DIR__ . '/auth.php';
-require_role(['Editor', 'Admin']);
+require_role(['User', 'Admin']);
 $user = $_SESSION['user'];
 ?>
 <!DOCTYPE html>
