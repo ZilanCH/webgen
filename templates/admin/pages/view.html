@@ -1,0 +1,15 @@
+{% extends 'layout.html' %}
+{% block content %}
+<section class="card">
+  <header class="heading">
+    <div>
+      <h1>{{ page.title }}</h1>
+      <p class="hint">Owner: {{ page.owner_name }} ({{ page.owner_email }})</p>
+    </div>
+    <form method="post" action="{{ url_for('admin_delete_page', page_id=page.id) }}" onsubmit="return confirm('Delete this page?');">
+      <button type="submit" class="button danger">Delete</button>
+    </form>
+  </header>
+  <article class="page-body">{{ page.content | nl2br }}</article>
+</section>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% extends 'layout.html' %}
+{% block content %}
+<section class="card">
+  <h1>Edit page</h1>
+  <form method="post" class="form-grid">
+    <label>Title
+      <input type="text" name="title" value="{{ page.title }}" required>
+    </label>
+    <label>Content
+      <textarea name="content" rows="8" required>{{ page.content }}</textarea>
+    </label>
+    <button type="submit">Save</button>
+  </form>
+</section>
+{% endblock %}

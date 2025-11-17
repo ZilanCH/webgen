@@ -1,0 +1,25 @@
+{% extends 'layout.html' %}
+{% block content %}
+<section class="card narrow">
+  <h1>Edit footer link</h1>
+  <form method="post" class="form-grid">
+    <label>
+      Label
+      <input type="text" name="label" value="{{ link.label }}" required>
+    </label>
+    <label>
+      URL
+      <input type="url" name="url" value="{{ link.url }}" required>
+    </label>
+    <label>
+      Position
+      <input type="number" name="position" value="{{ link.position }}" step="1">
+      <div class="hint">Lower numbers appear first.</div>
+    </label>
+    <div class="actions">
+      <a class="button ghost" href="{{ url_for('admin_footer') }}">Cancel</a>
+      <button type="submit">Save changes</button>
+    </div>
+  </form>
+</section>
+{% endblock %}
