@@ -1,0 +1,18 @@
+{% extends 'layout.html' %}
+{% block content %}
+<section class="card">
+  <h1>Admin</h1>
+  <div class="grid-two">
+    <div>
+      <h3>Pages</h3>
+      <p class="hint">List, view, and delete any generated page.</p>
+      <a class="button" href="{{ url_for('admin_pages') }}">Manage pages</a>
+    </div>
+    <div>
+      <h3>Users</h3>
+      <p class="hint">Create users, reset passwords, and assign roles.</p>
+      <a class="button" href="{{ url_for('admin_users') }}">Manage users</a>
+    </div>
+  </div>
+</section>
+{% endblock %}
