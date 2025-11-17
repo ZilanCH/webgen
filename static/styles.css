@@ -45,6 +45,31 @@ main {
   margin: 0 auto;
 }
 
+.site-footer {
+  margin-top: 32px;
+  padding: 16px 24px 24px;
+  max-width: 900px;
+  margin-left: auto;
+  margin-right: auto;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  color: #475569;
+  font-size: 14px;
+}
+
+.footer-links {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.footer-links a {
+  color: #0f6ef4;
+  font-weight: 600;
+}
+
 .card {
   background: white;
   border-radius: 12px;

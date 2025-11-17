@@ -33,5 +33,15 @@
     {% endwith %}
     {% block content %}{% endblock %}
   </main>
+  <footer class="site-footer">
+    <div class="footer-text">{{ g.footer_text }}</div>
+    {% if g.footer_links %}
+      <div class="footer-links">
+        {% for link in g.footer_links %}
+          <a href="{{ link.url }}" target="_blank" rel="noopener">{{ link.label }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
+  </footer>
 </body>
 </html>
