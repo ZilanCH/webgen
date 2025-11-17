@@ -5,9 +5,6 @@ ensure_session_started();
 $flash = $_SESSION['flash'] ?? null;
 unset($_SESSION['flash']);
 $user = $_SESSION['user'] ?? null;
-?>
-<!DOCTYPE html>
-// Simple PHP front-end generator
 
 $templates = [
     'portfolio' => [
@@ -197,9 +194,9 @@ function build_template_content(string $template, array $data): string
 
 function build_site_html(array $data, string $template, array $buttons, array $social, string $logoPath, string $favicon): string
 {
-    $primary = sanitize_text($data['primary_color'] ?? '#1f6feb');
-    $secondary = sanitize_text($data['secondary_color'] ?? '#30a46c');
-    $name = sanitize_text($data['name'] ?? 'Your Name');
+    $primary = sanitize_text($data['primary_color'] ?? '#00bcd4');
+    $secondary = sanitize_text($data['secondary_color'] ?? '#8b5cf6');
+    $name = sanitize_text($data['name'] ?? 'Zilan Webgen');
     $title = sanitize_text($data['title'] ?? 'Title');
     $subtitle = sanitize_text($data['subtitle'] ?? 'Subtitle');
 
@@ -230,21 +227,21 @@ function build_site_html(array $data, string $template, array $buttons, array $s
     <style>
         :root { --primary: {$primary}; --secondary: {$secondary}; }
         * { box-sizing: border-box; }
-        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #f5f7fb; color: #0f172a; }
-        header { background: var(--primary); color: #fff; padding: 32px 24px; text-align: center; }
+        body { font-family: Arial, sans-serif; margin: 0; padding: 0; background: #0b1020; color: #e2e8f0; }
+        header { background: radial-gradient(circle at 20% 20%, rgba(0,188,212,0.18), transparent 35%), radial-gradient(circle at 80% 0%, rgba(139,92,246,0.18), transparent 35%), #0b1020; color: #fff; padding: 32px 24px; text-align: center; }
         header h1 { margin: 8px 0; }
         header p { margin: 0; opacity: 0.9; }
         main { padding: 24px; max-width: 900px; margin: 0 auto; }
-        section { background: #fff; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08); }
+        section { background: #0f172a; border-radius: 12px; padding: 20px; margin-bottom: 16px; box-shadow: 0 10px 30px rgba(15, 23, 42, 0.35); border: 1px solid #1e293b; }
         h2 { margin-top: 0; color: var(--primary); }
         .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; }
-        .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 16px; }
-        .btn { display: inline-block; margin: 6px 6px 0 0; padding: 10px 16px; border-radius: 8px; color: #fff; text-decoration: none; font-weight: 700; }
-        .social { margin-top: 10px; display: flex; gap: 12px; flex-wrap: wrap; }
+        .card { background: #0b1224; border: 1px solid #1e293b; border-radius: 10px; padding: 16px; }
+        .btn { display: inline-block; margin: 6px 6px 0 0; padding: 10px 16px; border-radius: 8px; color: #fff; text-decoration: none; font-weight: 700; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }
+        .social { margin-top: 10px; display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
         .logo { max-height: 60px; margin-bottom: 8px; }
         .price { font-size: 22px; color: var(--secondary); font-weight: bold; }
         ul { padding-left: 20px; }
-        .cta { font-weight: bold; color: var(--primary); }
+        .cta { font-weight: bold; color: var(--primary); text-align: center; }
         .hero { text-align: center; }
     </style>
 </head>
@@ -332,9 +329,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 } else {
     $data = [
-        'primary_color' => '#1f6feb',
-        'secondary_color' => '#30a46c',
+        'primary_color' => '#00bcd4',
+        'secondary_color' => '#8b5cf6',
         'template' => 'portfolio',
+        'name' => 'Zilan Webgen',
+        'title' => 'Create your site',
+        'subtitle' => 'Cyan & Violet powered builder',
     ];
     $template = 'portfolio';
     $buttons = [];
@@ -347,86 +347,66 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>WebGen Auth</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 800px; margin: 2rem auto; padding: 1rem; }
-        form { border: 1px solid #ccc; padding: 1rem; margin-bottom: 1.5rem; }
-        label { display: block; margin-bottom: 0.5rem; }
-        input[type="text"], input[type="password"] { width: 100%; padding: 0.5rem; margin-bottom: 1rem; }
-        .message { padding: 0.75rem 1rem; background: #f1f8ff; border: 1px solid #b6d6ff; margin-bottom: 1rem; }
-        .links a { margin-right: 1rem; }
-    </style>
-</head>
-<body>
-<h1>Welcome to WebGen</h1>
-<?php if ($flash): ?>
-    <div class="message"><?= htmlspecialchars($flash, ENT_QUOTES, 'UTF-8') ?></div>
-<?php endif; ?>
-
-<?php if ($user): ?>
-    <p>Hello, <strong><?= htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8') ?></strong> (<?= htmlspecialchars($user['role'], ENT_QUOTES, 'UTF-8') ?>)</p>
-    <div class="links">
-        <a href="/dashboard.php">Dashboard</a>
-        <a href="/editor.php">Editor</a>
-        <a href="/admin.php">Admin</a>
-        <a href="/logout.php">Logout</a>
-    </div>
-<?php else: ?>
-    <form action="/login.php" method="post">
-        <h2>Login</h2>
-        <label for="login-username">Username</label>
-        <input type="text" id="login-username" name="username" required>
-
-        <label for="login-password">Password</label>
-        <input type="password" id="login-password" name="password" required>
-
-        <button type="submit">Login</button>
-    </form>
-
-    <form action="/register.php" method="post">
-        <h2>Register</h2>
-        <label for="reg-username">Username</label>
-        <input type="text" id="reg-username" name="username" required>
-
-        <label for="reg-password">Password (min 8 characters)</label>
-        <input type="password" id="reg-password" name="password" minlength="8" required>
-
-        <button type="submit">Create Account</button>
-    </form>
-<?php endif; ?>
-    <title>WebGen Builder</title>
+    <title>Zilan Webgen</title>
     <style>
         * { box-sizing: border-box; }
-        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; background: #0b1224; color: #e2e8f0; }
-        header { padding: 28px 22px; background: radial-gradient(circle at 20% 20%, rgba(48,164,108,0.2), transparent 35%), #0b1224; }
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; margin: 0; background: #050815; color: #e2e8f0; }
+        header.hero { padding: 28px 22px; background: linear-gradient(135deg, rgba(0,188,212,0.35), rgba(139,92,246,0.35)); border-bottom: 1px solid #1f2937; }
         h1 { margin: 0; }
-        .wrapper { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 20px; }
+        .wrapper { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 20px; align-items: start; }
         form { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; padding: 18px; }
         label { display: block; margin-top: 12px; font-weight: 600; }
-        input[type=text], input[type=url], input[type=color], textarea, select { width: 100%; padding: 10px; margin-top: 6px; border-radius: 8px; border: 1px solid #1f2937; background: #111827; color: #e2e8f0; }
+        input[type=text], input[type=url], input[type=color], input[type=password], textarea, select { width: 100%; padding: 10px; margin-top: 6px; border-radius: 8px; border: 1px solid #1f2937; background: #111827; color: #e2e8f0; }
         textarea { min-height: 80px; }
         .field-group { display: flex; gap: 10px; }
         .field-group > div { flex: 1; }
         .small-note { font-size: 12px; color: #94a3b8; }
         button { margin-top: 14px; padding: 12px 16px; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; }
-        .primary { background: #2563eb; color: #fff; }
+        .primary { background: #00bcd4; color: #050815; }
         .secondary { background: #334155; color: #fff; margin-left: 8px; }
         .template-fields { margin-top: 12px; border: 1px dashed #334155; padding: 12px; border-radius: 10px; }
         .section-title { margin-top: 20px; border-bottom: 1px solid #1f2937; padding-bottom: 8px; font-size: 14px; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }
         .mini-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 8px; }
         .preview { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; padding: 12px; }
         iframe { width: 100%; height: 800px; background: #fff; border-radius: 10px; border: 1px solid #1f2937; }
-        .message { margin: 12px 0; padding: 10px; background: #0ea5e9; color: #0b1224; border-radius: 8px; }
+        .message { margin: 12px 0; padding: 10px; background: #22d3ee; color: #050815; border-radius: 8px; }
         .dynamic-group { background: #111827; padding: 10px; border-radius: 8px; margin-top: 8px; }
         .flex { display: flex; gap: 8px; }
+        .auth { background: #0f172a; border: 1px solid #1f2937; border-radius: 12px; padding: 18px; }
+        .links a { color: #22d3ee; margin-right: 12px; text-decoration: none; }
     </style>
 </head>
 <body>
-<header>
-    <h1>WebGen Builder</h1>
-    <p class="small-note">Fill out the fields, preview your template, then generate a ready-to-serve PHP site under ./&lt;slug&gt;/index.php</p>
+<header class="hero">
+    <h1>Zilan Webgen</h1>
+    <p class="small-note">Cyan/Violet themed website generator. Use the builder to preview and generate ./&lt;slug&gt;/index.php without any external backend.</p>
+    <?php if ($user): ?>
+        <p>Angemeldet als <strong><?= htmlspecialchars($user['username'], ENT_QUOTES, 'UTF-8') ?></strong> (<?= htmlspecialchars($user['role'], ENT_QUOTES, 'UTF-8') ?>)
+            — <a class="links" href="/dashboard.php">Dashboard</a> <a class="links" href="/logout.php">Logout</a>
+            <?php if ($user['role'] === 'Admin'): ?><a class="links" href="/admin.php">Admin</a><?php endif; ?>
+        </p>
+    <?php endif; ?>
+    <?php if ($flash): ?><div class="message"><?= htmlspecialchars($flash, ENT_QUOTES, 'UTF-8') ?></div><?php endif; ?>
 </header>
+
 <div class="wrapper">
+    <?php if (!$user): ?>
+    <div class="auth">
+        <h2>Login</h2>
+        <form action="/login.php" method="post">
+            <label for="login-username">Username<input type="text" id="login-username" name="username" required></label>
+            <label for="login-password">Password<input type="password" id="login-password" name="password" required></label>
+            <button type="submit" class="primary">Login</button>
+        </form>
+        <h2>Register</h2>
+        <form action="/register.php" method="post">
+            <label for="reg-username">Username<input type="text" id="reg-username" name="username" required></label>
+            <label for="reg-password">Password (min 8 characters)<input type="password" id="reg-password" name="password" minlength="8" required></label>
+            <button type="submit" class="secondary">Create Account</button>
+        </form>
+    </div>
+    <?php endif; ?>
+
     <form method="post" enctype="multipart/form-data">
         <div class="section-title">Basics</div>
         <label>Name<input type="text" name="name" value="<?= htmlspecialchars($data['name'] ?? '') ?>" required></label>
@@ -436,8 +416,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div class="section-title">Branding</div>
         <div class="mini-grid">
-            <label>Primary color<input type="color" name="primary_color" value="<?= htmlspecialchars($data['primary_color'] ?? '#1f6feb') ?>"></label>
-            <label>Secondary color<input type="color" name="secondary_color" value="<?= htmlspecialchars($data['secondary_color'] ?? '#30a46c') ?>"></label>
+            <label>Primary color<input type="color" name="primary_color" value="<?= htmlspecialchars($data['primary_color'] ?? '#00bcd4') ?>"></label>
+            <label>Secondary color<input type="color" name="secondary_color" value="<?= htmlspecialchars($data['secondary_color'] ?? '#8b5cf6') ?>"></label>
         </div>
         <label>Logo upload<input type="file" name="logo_file" accept="image/*"></label>
         <label>Logo URL (used if no upload provided)<input type="url" name="logo_url" value="<?= htmlspecialchars($data['logo_url'] ?? '') ?>" placeholder="https://example.com/logo.png"></label>
@@ -473,7 +453,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <div class="section-title">Social links</div>
         <label>Email<input type="text" name="social_email" value="<?= htmlspecialchars($_POST['social_email'] ?? '') ?>" placeholder="you@example.com"></label>
         <label>Discord user URL<input type="url" name="social_discord" value="<?= htmlspecialchars($_POST['social_discord'] ?? '') ?>" placeholder="https://discord.com/users/123456789">
-            <div class="small-note">Use your Discord user URL (e.g., https://discord.com/users/&lt;id&gt; or profile link).</div>
+            <div class="small-note">Use your Discord user URL (e.g., https://discord.com/users/&lt;id&gt;). Profile &gt; Copy User ID in Discord settings.</div>
         </label>
 
         <div class="section-title">Actions</div>
@@ -490,6 +470,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         <?php endif; ?>
     </div>
 </div>
+
 <script>
 const templateSelect = document.getElementById('template-select');
 const templateFields = document.querySelectorAll('.template-fields');
@@ -512,7 +493,7 @@ function createButtonRow(label = '', url = '', color = '') {
         <div class="flex">
             <input type="text" name="button_label[]" placeholder="Button label" value="${label}" required>
             <input type="url" name="button_url[]" placeholder="https://link" value="${url}" required>
-            <input type="color" name="button_color[]" value="${color || '#2563eb'}" title="Button color">
+            <input type="color" name="button_color[]" value="${color || '#00bcd4'}" title="Button color">
             <button type="button" class="secondary remove">Remove</button>
         </div>
     `;
@@ -530,7 +511,7 @@ if (existingLabels.length) {
         createButtonRow(label, existingUrls[idx] || '', existingColors[idx] || '');
     });
 } else {
-    createButtonRow('Get in touch', '#', '#2563eb');
+    createButtonRow('Get in touch', '#', '#00bcd4');
 }
 updateTemplateVisibility();
 </script>
